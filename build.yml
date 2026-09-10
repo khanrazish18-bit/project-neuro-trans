@@ -1,0 +1,60 @@
+name: Auto Unzip, Upgrade and Build APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # اس سے آپ جب چاہیں خود بٹن دبا کر بھی رن کر سکتے ہیں
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. گٹ ہب ریپوزٹری کا کوڈ حاصل کرنا
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 2. زپ فائل کو خودکار طریقے سے کھولنا (Unzip)
+    - name: Unzip App File
+      run: |
+        if [ -f "neuro-trans-app.zip" ]; then
+          unzip -o neuro-trans-app.zip -d my_extracted_app
+          # فائلز کو صحیح جگہ پر منتقل کرنا
+          mv my_extracted_app/*/* . 2>/dev/null || mv my_extracted_app/* . 2>/dev/null || true
+        fi
+
+    # 3. اینڈرائیڈ بلڈ کے لیے جاوا (Java) سیٹ کرنا
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    # 4. فلٹر (Flutter) کا تازہ ترین مستحکم ورژن انسٹال کرنا
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+
+    # 5. پرانے کوڈ اور پیکجز کو خودکار طور پر نئے دور کے مطابق اپ گریڈ کرنا (Auto-Fix)
+    - name: Auto Fix and Upgrade Outdated Code
+      run: |
+        flutter clean
+        # پرانے پیکجز کو نئے ورژن کے مطابق خود بخود تبدیل کرنے کی کمانڈ:
+        flutter pub upgrade --major-versions --allow-newer
+        
+        # اینڈرائیڈ کی پرانی فائلز کو صاف کرنا:
+        cd android && ./gradlew clean || true
+        cd ..
+
+    # 6. مکمل طور پر APK تیار کرنا
+    - name: Build Flutter APK
+      run: flutter build apk --release --no-tree-shake-icons
+
+    # 7. تیار شدہ APK کو ڈاؤن لوڈ کے لیے گٹ ہب پر محفوظ کرنا
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: Neuro-Trans-App-APK
+        path: build/app/outputs/flutter-apk/app-release.apk
