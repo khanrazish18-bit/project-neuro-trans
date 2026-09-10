@@ -1,0 +1,64 @@
+name: Auto Unzip and Build Flutter APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Unzip Project Files and Locate Flutter Root
+      run: |
+        if [ -f "neuro-trans-app.zip" ]; then
+          unzip -o neuro-trans-app.zip -d extracted_app
+          
+          # یہ کمانڈ پورے فولڈر میں pubspec.yaml کو خودکار طریقے سے ڈھونڈے گی
+          FLUTTER_ROOT=$(find extracted_app -name "pubspec.yaml" -exec dirname {} \;)
+          
+          if [ -n "$FLUTTER_ROOT" ]; then
+            echo "Flutter root found at: $FLUTTER_ROOT"
+            # سارا کوڈ مین ڈائریکٹری میں منتقل کریں جہاں گٹ ہب اسے چلا سکے
+            cp -r $FLUTTER_ROOT/. .
+          else
+            echo "Error: Could not find pubspec.yaml inside the zip file."
+            exit 1
+          fi
+        else
+          echo "Error: neuro-trans-app.zip not found."
+          exit 1
+        fi
+
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+
+    - name: Auto Fix and Upgrade Outdated Dependencies
+      run: |
+        flutter clean
+        # پرانے کوڈ اور ایس ڈی کے (SDK) کے مسائل کو فکس کرنے کے لیے
+        flutter pub upgrade --major-versions --allow-newer
+        cd android && ./gradlew clean || true
+        cd ..
+
+    - name: Build Flutter APK
+      run: flutter build apk --release --no-tree-shake-icons
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Neuro-Trans-App-APK
+        path: build/app/outputs/flutter-apk/app-release.apk
